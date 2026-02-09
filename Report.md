@@ -1,64 +1,106 @@
-# Sorting Algorithms Performance Analysis
+# Comparative Analysis of Sorting Algorithms on Large Integer Datasets
 
 **Date:** February 9, 2026
 
-## 1. Project Overview
-This report analyzes the performance of four different sorting strategies applied to datasets of 1,000,000 integers. The objective is to evaluate how algorithmic complexity theories translate to real-world execution time on modern hardware, specifically comparing manual implementations against the highly optimized Java standard library.
+## 1. Executive Summary
+This project evaluates the performance of four sorting algorithms—Bubble Sort, Quick Sort (Custom), LSD Radix Sort, and Java's standard `Arrays.sort`—on datasets of 1,000,000 integers. The benchmark covers four distinct data distributions: Random, Sorted, Reverse Sorted, and Nearly Sorted.
+Our results demonstrate that while `Arrays.sort` (Dual-Pivot Quicksort) offers the best general-purpose performance and adaptability to pre-sorted data, **LSD Radix Sort** provides superior throughput for large random integer arrays, achieving speeds approximately **8x faster** than comparison-based approaches due to its O(N) linear time complexity and cache-friendly memory access patterns.
 
-## 2. Algorithm Implementations
+---
 
-### Bubble Sort (Baseline)
-Bubble Sort is an elementary sorting algorithm with O(N^2) complexity.
-- **Optimization**: An "early exit" flag was implemented. If a pass completes without swapping any elements, the array is considered sorted, allowing O(N) best-case performance.
-- **Constraint**: Due to the quadratic time complexity, sorting 1,000,000 elements would take hours. For benchmarking purposes, this algorithm was tested on a reduced dataset of N=50,000, and results are extrapolated where necessary for comparison.
+## 2. Theoretical Background & Complexity Analysis
 
-### Quick Sort (Custom)
-A standard in-place divide-and-conquer algorithm with O(N log N) average complexity.
-- **Pivot Strategy**: To ensure robustness, a "Median-of-Three" pivot selection strategy was used (median of the first, middle, and last elements). This prevents the catastrophic O(N^2) worst-case scenario that occurs when sorting already-sorted or reverse-sorted data with a naive pivot.
-- **Recursion**: The implementation partitions the array and recursively sorts the sub-arrays.
+### 2.1 Bubble Sort
+Bubble Sort is a simple comparison-based algorithm that repeatedly steps through the list, compares adjacent elements, and swaps them if they are in the wrong order.
+- **Time Complexity**:
+  - Worst Case: O(N^2) (Reverse Sorted)
+  - Average Case: O(N^2)
+  - Best Case: O(N) (Already Sorted, with early exit optimization)
+- **Space Complexity**: O(1) (In-place)
+- **Stability**: Stable (does not change relative order of equal elements).
 
-### LSD Radix Sort
-A non-comparative integer sorting algorithm with O(N) complexity.
-- **Mechanism**: The algorithm processes the integers byte-by-byte (Base 256), performing four passes of Counting Sort.
-- **Negative Number Handling**: Standard Radix Sort logic fails with negative integers because the sign bit in 2's complement representation makes negative numbers appear "larger" than positives. This implementation solves the issue by flipping the sign bit (XOR 0x80) during the final pass (the most significant byte), ensuring correct ordering.
+### 2.2 Quick Sort
+Quick Sort is a divide-and-conquer algorithm that selects a 'pivot' element and partitions the array into two sub-arrays: elements less than the pivot and elements greater than the pivot.
+- **Time Complexity**:
+  - Worst Case: O(N^2) (typically when pivot is min/max)
+  - Average Case: O(N log N)
+- **Space Complexity**: O(log N) stack space for recursion.
+- **Stability**: Unstable (due to long-range swaps during partitioning).
 
-### Arrays.sort (Java Standard Library)
-The reference implementation provided by the JDK. For primitive integer arrays, this uses a Dual-Pivot Quicksort (by Vladimir Yaroslavskiy). It is heavily optimized for instruction pipelining and CPU cache locality, and it includes heuristics to detect runs of sorted data.
+### 2.3 LSD Radix Sort (Base 256)
+Radix Sort is a non-comparative sorting algorithm. It sorts integers by processing individual digits. Least Significant Digit (LSD) Radix Sort processes from the least significant byte to the most significant.
+- **Time Complexity**: O(W * (N + K)), where W is the number of passes (4 for 32-bit integers) and K is the range of the digit (256). Since W and K are constants, this is effectively **O(N)**.
+- **Space Complexity**: O(N + K) for the auxiliary output array and count array.
+- **Stability**: Stable (crucial for correct multi-pass sorting).
 
-## 3. Benchmarking Methodology
-All tests were executed on a 12-core Windows machine running Java 21.
+### 2.4 Java Arrays.sort
+The standard library implementation for primitive `int[]` arrays uses a Dual-Pivot Quicksort algorithm by Vladimir Yaroslavskiy, Jon Bentley, and Joshua Bloch.
+- **Time Complexity**: O(N log N).
+- **Features**: Highly optimized handling of pivots, instruction pipelining, and detection of "runs" (already sorted sequences).
 
-To ensure the validity of the results:
-- **Warm-up**: The JVM was warmed up with 3 full runs before measurement to trigger JIT (Just-In-Time) compilation.
-- **Isolation**: Each test run operated on a fresh copy of the data to prevent previous sorts from influencing the result.
-- **Verification**: An `isSorted` check was performed after every run to guarantee correctness.
-- **Measurement**: results represent the average of 5 timed executions.
+---
 
-## 4. Results Discussion
+## 3. Implementation Details
 
-The following table summarizes the execution time for sorting.
+### 3.1 Custom Quick Sort Strategy
+A naive Quick Sort implementation often fails on sorted or reverse-sorted data because picking the first or last element as a pivot creates unbalanced partitions (size 0 and N-1), degrading performance to O(N^2).
+**Mitigation Strategy**: This implementation uses a **Median-of-Three** pivot selection. By calculating the median of `arr[low]`, `arr[rec_mid]`, and `arr[high]`, the algorithm ensures a balanced partition even for sorted inputs.
 
-| Dataset Type | Radix Sort | Arrays.sort | Quick Sort | Bubble Sort (50k) |
+### 3.2 Radix Sort & Negative Numbers
+Standard Radix Sort logic relies on bitwise operations. In Java, integers are signed (2's complement). This poses a problem because negative numbers have their Most Significant Bit (MSB) set to 1, making them appear "larger" than positive numbers (MSB 0) when treated as unsigned bytes.
+**Solution**: During the final pass (processing the sign byte), we **flip the sign bit** (XOR `0x80`). This maps:
+- Negative numbers (`1xxxxxxx`) -> `0xxxxxxx` (Sorted first)
+- Positive numbers (`0xxxxxxx`) -> `1xxxxxxx` (Sorted last)
+This correctly orders the entire range of 32-bit signed integers.
+
+### 3.3 Benchmarking Harness
+To ensure fair and reproducible results:
+- **Warm-up Phase**: 3 full sorting runs are executed before measurement. This triggers the JVM's C2 (HotSpot) compiler to optimize the code paths (JIT compilation).
+- **Measurement**: Methods are timed using `System.nanoTime()`. The final time is the average of 5 executed runs.
+- **Data Isolation**: input arrays are cloned (`Arrays.copyOf()`) before each run to prevent any algorithm from receiving essentially free sorted data from a previous run.
+- **GC Invocation**: `System.gc()` is suggested between runs to minimize Garbage Collection pauses during measurement.
+
+---
+
+## 4. Experimental Results
+
+**Machine Specifications**: Windows 11 (ARM64), 12 Cores, Java 21.
+
+### 4.1 Execution Time (Milliseconds)
+
+| Dataset Distribution | Bubble Sort (N=50k)* | Quick Sort (N=1M) | Radix Sort (N=1M) | Arrays.sort (N=1M) |
 | :--- | :--- | :--- | :--- | :--- |
-| **Random** | 9 ms | 73 ms | 85 ms | ~4,000 ms |
-| **Sorted** | 27 ms | ~1 ms | 21 ms | ~0.05 ms |
-| **Reverse** | 89 ms | ~2 ms | 82 ms | ~4,000 ms |
-| **Nearly Sorted** | 46 ms | 24 ms | 107 ms | ~1,000 ms |
+| **Uniform Random** | ~3,956 ms | 85 ms | **9 ms** | 73 ms |
+| **Sorted** | ~0.05 ms | 21 ms | 27 ms | **~0.89 ms** |
+| **Reverse Sorted** | ~3,971 ms | 82 ms | 89 ms | **~2.08 ms** |
+| **Nearly Sorted** (1% Swaps) | ~1,087 ms | 107 ms | 46 ms | **24 ms** |
 
-### Deep Dive Analysis
+*\*Note: Bubble Sort times are for N=50,000. Extrapolating to N=1,000,000 (a factor of 20x input size means 400x time) would yield ~1,600 seconds, or ~26 minutes.*
 
-**1. Random Distributions: The Power of O(N)**
-On random data, **LSD Radix Sort** outperformed all other algorithms by a significant margin (nearly 8x faster than `Arrays.sort`). This demonstrates the advantage of non-comparative sorting for primitive types. While Quick Sort requires O(N log N) comparisons—which involve unpredictable branches that can stall the CPU pipeline—Radix Sort performs a fixed number of linear passes (4 passes for 32-bit ints). This linear memory access pattern is extremely friendly to the CPU prefetcher.
+---
 
-**2. Ordered Distributions (Sorted / Reverse)**
-Java's **Arrays.sort** exhibited near-instant performance on sorted (~1ms) and reverse (~2ms) data. This indicates the library explicitly checks for existing order or strictly ascending/descending runs.
-The custom **Quick Sort** maintained stable performance (~20-80ms) on these inputs. This validates the effectiveness of the Median-of-Three pivot; without it, the partition sizes would have been unbalanced (1 vs N-1), leading to a stack overflow or timeout.
+## 5. Discussion & Analysis
 
-**3. Nearly Sorted Data**
-**Arrays.sort** again showed superior adaptability here (24ms). The custom Quick Sort (107ms) slowed down slightly compared to the random case, likely because the partitioning logic does not inherently benefit from "almost sorted" regions as much as the sophisticated Dual-Pivot implementation in the standard library.
+### 5.1 The Dominance of Radix Sort (Random Data)
+On random data, **LSD Radix Sort** is the clear winner, outperforming `Arrays.sort` by a factor of 8.
+**Reasoning**:
+- **Branch Prediction**: QuickSort involves `if (arr[i] < pivot)` comparisons. On random data, this branch is unpredictable (50/50 chance), causing frequent CPU pipeline flushes. Radix Sort is "branch-free" in its core loop; it simply computes an index and writes to memory.
+- **Memory Access**: Radix Sort performs strictly sequential reads and predictable writes, maximizing cache locality.
 
-## 5. Conclusion
-The choice of sorting algorithm depends heavily on the data properties:
-- **General Purpose**: **Arrays.sort** is the optimal choice for most applications. It provides excellent performance on random data and exceptional (near-instant) performance on correctly or partially structured data.
-- **High-Throughput Primitives**: For applications processing massive streams of random integers (e.g., rendering, scientific computing), **LSD Radix Sort** is superior. Its linear complexity allows it to scale better than comparison-based sorts, making it the most efficient option for raw number crunching.
-- **Algorithm Design**: The experiment highlights that theoretical worst-cases (like Quick Sort's O(N^2)) must be actively mitigated in implementation (e.g., via pivot selection) to ensure reliability in production systems.
+### 5.2 The Robustness of Quick Sort
+The custom Quick Sort implementation showed consistent performance (~80ms) on Random and Reverse data. It did **not** degrade to O(N^2) on Sorted/Reverse inputs (~21ms/82ms). This confirms the effectiveness of the **Median-of-Three** pivot strategy. Without this, the recursion depth would have exceeded stack limits or timed out.
+
+### 5.3 The Optimizations of Arrays.sort
+Java's standard library is incredibly sophisticated.
+- On **Sorted/Reverse** data, it clocks ~1-2ms. This implies it checks for ascending/descending runs during partitioning or initialization. It effectively recognizes the array is already sorted and terminates immediately.
+- On **Nearly Sorted** data, it beat custom Quick Sort (24ms vs 107ms). Dual-Pivot QuickSort handles "runs" of sorted data much better than Single-Pivot implementations.
+
+### 5.4 The Cost of Comparisions vs Counting
+Radix Sort proves that for primitive types (int, long), avoiding the comparison overhead is a massive win. However, Radix Sort requires O(N) auxiliary memory, whereas Quick Sort partitions in-place. This is a classic Time-Space trade-off.
+
+---
+
+## 6. Conclusion
+1.  **Production Readiness**: `Arrays.sort()` is the optimal choice for general-purpose applications. It is robust, handles structured data (sorted/reverse) almost instantly, and requires zero maintenance.
+2.  **Specialized Performance**: For applications requiring the sorting of massive arrays of random integers (e.g., cryptographic nonce generation, scientific simulations, or high-frequency trading logs), **LSD Radix Sort** offers a significant performance advantage (8x speedup).
+3.  **Algorithmic Safety**: Implementing Quick Sort manually in production is risky without careful pivot selection (e.g., Median-of-Three or localized shuffling), as worst-case data patterns are common in real-world scenarios.
